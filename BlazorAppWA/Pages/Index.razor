@@ -1,0 +1,122 @@
+﻿@page "/"
+@using BlazorAppWA.Models;
+@using BlazorAppWA.Services;
+@inject IJSRuntime JSRunTime
+@inject ISpendService SpendService
+
+<PageTitle>Index</PageTitle>
+
+<button class="btn btn-primary" @onclick="() => OpenModal()">Nova despesa</button>
+
+@if (TotalOfSpends > 0)
+{
+    <div class="alert alert-secondary" style="margin-top: 12px;" role="alert">
+        Total de despesas: @TotalOfSpends
+    </div>
+}
+
+@if (Spend == null)
+{
+    <p><em>Carregando...</em></p>
+}
+else
+{
+    <table class='table'>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Descriçao</th>
+                <th>Valor</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var spend in Spends)
+            {
+                <tr>
+                    <td>@spend.Id</td>
+                    <td>@spend.Description</td>
+                    <td>@spend.Amount</td>
+                    <td>
+                        <a href='#' @onclick="async () => await Delete(spend.Id)">Deletar</a>
+                    </td>
+                </tr>
+
+            }
+        </tbody>
+    </table>
+}
+
+<ModalDialog @ref="@ModalDialog" Title="Criar despesa">
+    <div class="row">
+        <div class="form-group">
+            <label for="spendDescription" class="col-form-label">Descriçao:</label>
+            <input @bind-value="Spend.Description" type="text" class="form-control" id="spendDescription">
+        </div>
+        <div class="form-group">
+            <label for="spendValue" class="col-form-label">Valor:</label>
+            <input @bind-value="Spend.Amount" id="spendValue" class="form-control" />
+        </div>
+
+        <div class="modal-footer">
+            <button class="btn btn-secondary" @onclick="() => ModalDialog.Close()">Cancelar</button>
+            <button type="button" class="btn btn-primary" @onclick="async () => await AddSpend()">Salvar</button>
+        </div>
+    </div>
+</ModalDialog>
+
+@code {
+    private ModalDialog ModalDialog { get; set; }
+    private Spend Spend { get; set; }
+    private List<Spend> Spends = new List<Spend>();
+    private double TotalOfSpends => Spends.Sum(x => x.Amount);
+
+    protected override async Task OnInitializedAsync()
+    {
+        Spend = new();
+        Spends = await SpendService.GetSpends();
+    }
+
+    async Task Delete(Guid id)
+    {
+        var confirmed = await JSRunTime.InvokeAsync<bool>("confirm", "Are you sure you wish to delete it?");
+
+        if (confirmed is false) return;
+
+        var spendToRemove = Spends.FirstOrDefault(s => s.Id == id);
+        Spends.Remove(spendToRemove);
+
+        await SpendService.SaveSpends(Spends);
+    }
+
+    async Task AddSpend()
+    {
+        if (string.IsNullOrEmpty(Spend.Description))
+        {
+            await JSRunTime.InvokeAsync<bool>("alert", "Description is required");
+            return;
+        }
+
+        if (Spend.Amount <= 0)
+        {
+            await JSRunTime.InvokeAsync<bool>("alert", "Amount should be greater than 0");
+            return;
+        }
+
+        Spends.Add(new Spend
+        {
+            Id = Guid.NewGuid(),
+            Amount = Spend.Amount,
+            Description = Spend.Description
+        });
+
+        await SpendService.SaveSpends(Spends);
+        ModalDialog.Close();
+    }
+
+    void OpenModal()
+    {
+        Spend = new();
+        ModalDialog.Open();
+    }
+}
